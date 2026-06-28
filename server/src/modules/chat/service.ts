@@ -8,20 +8,21 @@ import type { ChatListItem, MessageListItem } from "./types";
 /**
  * Yeni bir sohbet oluşturur ya da var olanı getirir.
  */
-export async function getOrCreateChat(chatId?: string): Promise<string> {
+export async function getOrCreateChat(userId: string, chatId?: string): Promise<string> {
   if (chatId) {
     const existing = await prisma.chat.findUnique({
       where: { id: chatId },
-      select: { id: true },
+      select: { id: true, userId: true },
     });
-    if (existing) return existing.id;
+    // Sohbetin sahibi bu kullanıcı mı kontrol et
+    if (existing && existing.userId === userId) return existing.id;
   }
 
-  // Yeni sohbet aç (şimdilik anonim - userId ilerleyen aşamada Auth ile bağlanacak)
+  // Yeni sohbet aç (artık gerçek userId ile açılıyor)
   const chat = await prisma.chat.create({
     data: {
       title: null,
-      userId: "anonymous", // TODO: Auth modülü gelince gerçek userId ile değiştirilecek
+      userId: userId,
     },
   });
 
@@ -84,8 +85,9 @@ export async function getChatHistory(
 /**
  * Kullanıcının tüm sohbet listesini getirir.
  */
-export async function getChatList(): Promise<ChatListItem[]> {
+export async function getChatList(userId: string): Promise<ChatListItem[]> {
   const chats = await prisma.chat.findMany({
+    where: { userId },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,

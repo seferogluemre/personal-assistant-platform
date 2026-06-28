@@ -12,79 +12,75 @@ import {
   formatChatList,
   formatMessageList,
 } from "./formatters";
+import { authPlugin } from "../auth/plugins/authPlugin";
 
 // ─────────────────────────────────────────────
-// Chat Modülü - Controller (Endpoint Tanımları)
-// ─────────────────────────────────────────────
-//
-// Mastra agent entegrasyonu: providers/mastra/index.ts'den import edilecek.
-// Şimdilik servis + formatter katmanları bağlandı, ajan bağlantısı
-// bir sonraki adımda (providers refaktörü) yapılacak.
+// Chat Modülü - Controller
 // ─────────────────────────────────────────────
 
 export const chatController = new Elysia({ prefix: "/chat" })
+  // Sadece yetkili kullanıcılar (cookie'si olanlar) girebilsin
+  .use(authPlugin)
+  .guard({ requireAuth: true }, (app) =>
+    app
 
-  // ── POST /chat/send ──────────────────────────────────────────
-  // Yeni mesaj gönder → DB'ye kaydet → Yavuz'a ilet → Yanıtı DB'ye kaydet → Döndür
-  .post(
-    "/send",
-    async ({ body, error }) => {
-      const { chatId: incomingChatId, message } = body;
+      // ── POST /chat/send ──────────────────────────────────────────
+      .post(
+        "/send",
+        async ({ body, user }) => {
+          const { chatId: incomingChatId, message } = body;
 
-      // 1. Sohbeti getir ya da yeni aç
-      const chatId = await getOrCreateChat(incomingChatId);
+          // 1. Sohbeti getir ya da yeni aç (gerçek user.id ile)
+          const chatId = await getOrCreateChat(user!.id, incomingChatId);
 
-      // 2. Kullanıcı mesajını DB'ye kaydet
-      await saveUserMessage(chatId, message);
+          // 2. Kullanıcı mesajını DB'ye kaydet
+          await saveUserMessage(chatId, message);
 
-      // 3. Geçmiş mesajları çek (Yavuz'a hafıza olarak verilecek)
-      const history = await getChatHistory(chatId);
+          // 3. Geçmiş mesajları çek (Yavuz'a hafıza olarak verilecek)
+          const history = await getChatHistory(chatId);
 
-      // 4. TODO: Mastra → Yavuz ajanını çağır (bir sonraki adımda bağlanacak)
-      //    const agentResponse = await yavuz.generate(history);
-      //    const replyText = agentResponse.text;
-      const replyText = `[Yavuz placeholder] Mesajın alındı: "${message}"`; // geçici
+          // 4. TODO: Mastra → Yavuz ajanı (sonraki modül)
+          const replyText = `[Yavuz placeholder] Mesajın alındı: "${message}"`;
 
-      // 5. Yavuz yanıtını DB'ye kaydet
-      const assistantMessageId = await saveAssistantMessage(chatId, replyText);
+          // 5. Yavuz yanıtını DB'ye kaydet
+          const assistantMessageId = await saveAssistantMessage(chatId, replyText);
 
-      // 6. Formatter → standart response
-      return formatChatResponse({
-        chatId,
-        messageId: assistantMessageId,
-        content: replyText,
-        createdAt: new Date(),
-      });
-    },
-    {
-      body: t.Object({
-        chatId: t.Optional(t.String()),
-        message: t.String({ minLength: 1, maxLength: 4000 }),
-      }),
-    }
-  )
+          return formatChatResponse({
+            chatId,
+            messageId: assistantMessageId,
+            content: replyText,
+            createdAt: new Date(),
+          });
+        },
+        {
+          body: t.Object({
+            chatId: t.Optional(t.String()),
+            message: t.String({ minLength: 1, maxLength: 4000 }),
+          }),
+        }
+      )
 
-  // ── GET /chat/list ───────────────────────────────────────────
-  // Tüm sohbetleri listele
-  .get("/list", async () => {
-    const chats = await getChatList();
-    return formatChatList(chats);
-  })
+      // ── GET /chat/list ───────────────────────────────────────────
+      .get("/list", async ({ user }) => {
+        const chats = await getChatList(user!.id);
+        return formatChatList(chats);
+      })
 
-  // ── GET /chat/:chatId/messages ───────────────────────────────
-  // Belirli bir sohbetin mesajlarını getir
-  .get(
-    "/:chatId/messages",
-    async ({ params, error }) => {
-      const messages = await getMessagesByChatId(params.chatId);
-      if (!messages.length) {
-        return error(404, { message: "Sohbet bulunamadı veya mesaj yok." });
-      }
-      return formatMessageList(params.chatId, messages);
-    },
-    {
-      params: t.Object({
-        chatId: t.String(),
-      }),
-    }
+      // ── GET /chat/:chatId/messages ───────────────────────────────
+      .get(
+        "/:chatId/messages",
+        async ({ params, error, user }) => {
+          // Güvenlik: chat'in bu kullanıcıya ait olup olmadığı da service'de kontrol edilebilir.
+          const messages = await getMessagesByChatId(params.chatId);
+          if (!messages.length) {
+            return error(404, { message: "Sohbet bulunamadı veya mesaj yok." });
+          }
+          return formatMessageList(params.chatId, messages);
+        },
+        {
+          params: t.Object({
+            chatId: t.String(),
+          }),
+        }
+      )
   );

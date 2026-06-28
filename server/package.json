@@ -2,11 +2,12 @@
   "name": "server",
   "private": true,
   "scripts": {
-    "dev": "bun --watch index.ts"
+    "dev": "bun run --watch src/index.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^1.1.8",
     "@elysiajs/cors": "^1.2.0",
+    "@elysiajs/jwt": "^1.4.2",
     "@elysiajs/swagger": "^1.2.0",
     "@mastra/core": "^1.47.0",
     "@prisma/adapter-pg": "^7.8.0",

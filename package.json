@@ -6,6 +6,6 @@
     "client"
   ],
   "scripts": {
-    "dev": "cd server && bun --env-file=../config/server/.env --watch index.ts"
+    "dev": "cd server && bun --env-file=../config/server/.env --watch src/index.ts"
   }
 }
