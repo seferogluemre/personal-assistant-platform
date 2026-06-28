@@ -1,0 +1,11 @@
+{
+  "name": "openclaw-workspace",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "cd server && bun --env-file=../config/server/.env --watch index.ts"
+  }
+}
