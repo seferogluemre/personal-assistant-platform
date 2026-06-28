@@ -9,13 +9,17 @@
     "@elysiajs/cors": "^1.2.0",
     "@elysiajs/swagger": "^1.2.0",
     "@mastra/core": "^1.47.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "ai": "^4.1.20",
+    "dotenv": "^17.4.2",
     "elysia": "^1.2.1",
+    "pg": "^8.22.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/pg": "^8.20.0",
     "bun-types": "^1.1.42",
     "prisma": "^7.8.0",
     "typescript": "^5.7.2"
