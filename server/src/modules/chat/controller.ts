@@ -13,6 +13,8 @@ import {
   formatMessageList,
 } from "./formatters";
 import { authPlugin } from "../auth/plugins/authPlugin";
+import { assistantAgent } from "../../providers/mastra/agents/assistant";
+import { searchSimilarDocuments } from "../ai/rag";
 
 // ─────────────────────────────────────────────
 // Chat Modülü - Controller
@@ -36,13 +38,32 @@ export const chatController = new Elysia({ prefix: "/chat" })
           // 2. Kullanıcı mesajını DB'ye kaydet
           await saveUserMessage(chatId, message);
 
-          // 3. Geçmiş mesajları çek (Yavuz'a hafıza olarak verilecek)
+          // 3. Geçmiş mesajları çek (Asistana hafıza olarak verilecek)
           const history = await getChatHistory(chatId);
 
-          // 4. TODO: Mastra → Yavuz ajanı (sonraki modül)
-          const replyText = `[Yavuz placeholder] Mesajın alındı: "${message}"`;
+          // 4. RAG: Konuyla ilgili bilgileri Vektör veritabanından çek
+          const relevantDocs = await searchSimilarDocuments(message, 3);
+          const contextStr = relevantDocs.length > 0
+            ? `\n\n[SİSTEM BİLGİSİ (Kullanıcıya Gösterme) - Vektör Arama Sonuçları (Bu bilgileri kullanarak cevap ver):]\n` + relevantDocs.map(d => `- ${d.content}`).join("\n")
+            : "";
 
-          // 5. Yavuz yanıtını DB'ye kaydet
+          // 5. Mastra'ya mesaj listesini hazırla
+          // history dizisinin en son elemanı zaten az önce kaydettiğimiz mevcut 'message' oluyor.
+          const promptMessages = history.map(m => ({
+            role: m.role as "user" | "assistant" | "system",
+            content: m.content,
+          }));
+
+          // Vektörden gelen ek bilgiyi (RAG Context) son kullanıcı mesajının ardına gizlice iliştiriyoruz
+          if (contextStr && promptMessages.length > 0) {
+            promptMessages[promptMessages.length - 1].content += contextStr;
+          }
+
+          // 6. Mastra'dan LLM (Gemini) cevabını üret (AI SDK v4 uyumluluğu için generateLegacy)
+          const result = await assistantAgent.generateLegacy(promptMessages);
+          const replyText = result.text;
+
+          // 7. Asistanın yanıtını DB'ye kaydet
           const assistantMessageId = await saveAssistantMessage(chatId, replyText);
 
           return formatChatResponse({

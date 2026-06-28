@@ -4,6 +4,7 @@ import { cors } from "@elysiajs/cors";
 
 import { authController } from "./modules/auth";
 import { chatController } from "./modules/chat";
+import { aiController } from "./modules/ai";
 
 const app = new Elysia()
   // Global eklentiler
@@ -22,7 +23,7 @@ const app = new Elysia()
   // Modüller (Endpointler)
   .use(authController)
   .use(chatController)
-
-  .listen(3000);
+  .use(aiController)
+  .listen(3001);
 
 console.log(`🦊 Elysia Sunucusu çalışıyor: ${app.server?.url}`);

@@ -52,7 +52,7 @@ model Message {
 model Document {
   id        String                      @id @default(cuid())
   content   String // RAG için metin (chunk) içeriği
-  embedding Unsupported("vector(768)")? // Vektör verisi
+  embedding Unsupported("vector(3072)")? // Vektör verisi (gemini-embedding-2)
   metadata  Json? // Ekstra bilgiler (hangi dosyadan geldi vb.)
   createdAt DateTime                    @default(now())
 }

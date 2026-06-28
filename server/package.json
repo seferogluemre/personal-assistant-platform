@@ -2,7 +2,7 @@
   "name": "server",
   "private": true,
   "scripts": {
-    "dev": "bun run --watch src/index.ts"
+    "dev": "bun --env-file=../config/server/.env --watch src/index.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^1.1.8",
