@@ -7,5 +7,12 @@
   ],
   "scripts": {
     "dev": "cd server && bun --env-file=../config/server/.env --watch src/index.ts"
+  },
+  "dependencies": {
+    "playwright": "^1.61.1",
+    "puppeteer": "^25.2.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "xlsx": "^0.18.5"
   }
 }
