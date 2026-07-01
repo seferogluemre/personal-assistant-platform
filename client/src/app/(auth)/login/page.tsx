@@ -1,15 +1,42 @@
+"use client";
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { toast } from 'sonner';
+import { useAuth } from '@/providers/AuthProvider';
+import { loginSchema, type LoginFormData } from '@/schemas/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-
-export const metadata = {
-  title: 'OpenClaw — Giriş Yap',
-  description: 'OpenClaw AI asistanınıza giriş yapın',
-};
+import { useState } from 'react';
 
 export default function LoginPage() {
+  const [remember, setRemember] = useState(false);
+  const { login } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const {
+    register: registerField,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+  });
+
+  const onSubmit = async (data: LoginFormData) => {
+    setIsSubmitting(true);
+    try {
+      await login(data.email, data.password);
+      toast.success("Başarıyla giriş yapıldı. Yönlendiriliyorsunuz...");
+    } catch (err: any) {
+      toast.error(err.message || "Giriş yapılamadı. Şifrenizi veya e-postanızı kontrol edin.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex">
       {/* Sol Panel — Form */}
@@ -18,7 +45,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-2 mb-12">
           <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
             </svg>
           </div>
           <span className="font-semibold text-sm text-black">openclaw</span>
@@ -31,18 +58,18 @@ export default function LoginPage() {
 
           {/* Social Buttons */}
           <div className="flex gap-3 mb-6">
-            <Button variant="outline" className="flex-1 text-sm font-medium border-gray-200 text-gray-700 hover:bg-gray-50 h-10">
+            <Button variant="outline" type="button" className="flex-1 text-sm font-medium border-gray-200 text-gray-700 hover:bg-gray-50 h-10">
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
               </svg>
               Login with Google
             </Button>
-            <Button variant="outline" className="flex-1 text-sm font-medium border-gray-200 text-gray-700 hover:bg-gray-50 h-10">
+            <Button variant="outline" type="button" className="flex-1 text-sm font-medium border-gray-200 text-gray-700 hover:bg-gray-50 h-10">
               <svg className="mr-2 h-4 w-4" fill="#1877F2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
               </svg>
               Login with Facebook
             </Button>
@@ -58,8 +85,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Email & Password */}
-          <div className="space-y-4 mb-4">
+          {/* Form */}
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <Label htmlFor="email" className="text-sm font-medium text-gray-700 mb-1.5 block">
                 Email address<span className="text-red-500">*</span>
@@ -69,8 +96,13 @@ export default function LoginPage() {
                 type="email"
                 placeholder="Enter your email address"
                 className="h-10 border-gray-200 text-sm placeholder:text-gray-400 focus-visible:ring-black"
+                {...registerField('email')}
               />
+              {errors.email && (
+                <p className="text-xs text-red-500 mt-1 font-medium">{errors.email.message}</p>
+              )}
             </div>
+
             <div>
               <Label htmlFor="password" className="text-sm font-medium text-gray-700 mb-1.5 block">
                 Password<span className="text-red-500">*</span>
@@ -80,28 +112,48 @@ export default function LoginPage() {
                 type="password"
                 placeholder="••••••••••••"
                 className="h-10 border-gray-200 text-sm focus-visible:ring-black"
+                {...registerField('password')}
               />
+              {errors.password && (
+                <p className="text-xs text-red-500 mt-1 font-medium">{errors.password.message}</p>
+              )}
             </div>
-          </div>
 
-          {/* Remember Me & Forgot */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Checkbox id="remember" className="border-gray-300" />
-              <label htmlFor="remember" className="text-sm text-gray-500 cursor-pointer">Remember Me</label>
+            {/* Remember Me & Forgot */}
+            <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRemember(!remember)}
+                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                    remember ? "bg-black border-black" : "border-gray-300 bg-white"
+                  }`}
+                >
+                  {remember && (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </button>
+                <span className="text-sm text-gray-500 cursor-pointer select-none" onClick={() => setRemember(!remember)}>Remember Me</span>
+              </div>
+              <Link href="#" className="text-sm text-gray-500 hover:text-black transition-colors">
+                Forgot Password?
+              </Link>
             </div>
-            <Link href="#" className="text-sm text-gray-500 hover:text-black transition-colors">
-              Forgot Password?
-            </Link>
-          </div>
 
-          {/* Submit */}
-          <Button className="w-full h-10 bg-black hover:bg-gray-800 text-white font-semibold text-sm rounded-md mb-5">
-            Sign in to OpenClaw
-          </Button>
+            {/* Submit */}
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full h-10 bg-black hover:bg-gray-800 text-white font-semibold text-sm rounded-md mt-2 disabled:opacity-50"
+            >
+              {isSubmitting ? "Giriş Yapılıyor..." : "Sign in to OpenClaw"}
+            </Button>
+          </form>
 
           {/* Register Link */}
-          <p className="text-center text-sm text-gray-400">
+          <p className="text-center text-sm text-gray-400 mt-5">
             New on our platform?{' '}
             <Link href="/register" className="text-gray-700 font-medium hover:text-black transition-colors">
               Create an account
@@ -112,12 +164,9 @@ export default function LoginPage() {
 
       {/* Sağ Panel — Karanlık Vitrin */}
       <div className="hidden lg:flex flex-col w-1/2 min-h-screen bg-[#111111] relative overflow-hidden">
-        {/* Büyük arka plan yazısı */}
         <div className="absolute inset-0 flex items-center justify-center select-none pointer-events-none">
           <span className="text-[200px] font-black text-white/5 leading-none tracking-tighter">OC</span>
         </div>
-
-        {/* Üstte başlık */}
         <div className="relative z-10 p-12 pt-16 flex-1">
           <h2 className="text-4xl font-bold text-white leading-tight max-w-xs">
             Welcome back! Please sign in to your OpenClaw account
@@ -126,8 +175,6 @@ export default function LoginPage() {
             Thank you for registering! Please check your inbox and click the verification link to activate your account.
           </p>
         </div>
-
-        {/* Alt kart */}
         <div className="relative z-10 m-8 mt-0">
           <div className="bg-white rounded-2xl p-6 flex items-start gap-4">
             <div className="flex-1">
@@ -136,7 +183,7 @@ export default function LoginPage() {
             </div>
             <div className="w-10 h-10 bg-black rounded-full flex-shrink-0 flex items-center justify-center">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
               </svg>
             </div>
           </div>

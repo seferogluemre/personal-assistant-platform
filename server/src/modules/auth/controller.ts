@@ -3,6 +3,7 @@ import { jwt } from "@elysiajs/jwt";
 import { SignUpDto, SignInDto } from "./dtos";
 import { createUser, findUserByEmail, verifyPassword } from "./service";
 import { formatSafeUser } from "./formatters";
+import { authPlugin } from "./plugins/authPlugin";
 
 // JWT Plugin Setup (Bunu ana uygulamada da kullanacağız)
 export const jwtSetup = jwt({
@@ -73,8 +74,16 @@ export const authController = new Elysia({ prefix: "/auth" })
     }
   )
 
+  // ── ME / SESSION ──────────────────────────────────────────────
+  .use(authPlugin)
+  .get("/me", ({ user, error }) => {
+    if (!user) return error(401, { message: "Oturum açılmamış." });
+    return user;
+  })
+
   // ── ÇIKIŞ YAP ─────────────────────────────────────────────────
   .post("/sign-out", ({ cookie: { auth_token } }) => {
     auth_token.remove();
     return { success: true };
   });
+
