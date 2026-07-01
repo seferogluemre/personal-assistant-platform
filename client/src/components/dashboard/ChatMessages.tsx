@@ -124,11 +124,10 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
               {/* Bubble */}
               {msg.content && (
                 <div
-                  className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                    isUser
+                  className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${isUser
                       ? "bg-primary text-primary-foreground rounded-tr-sm"
                       : "bg-muted text-foreground rounded-tl-sm"
-                  }`}
+                    }`}
                 >
                   {msg.content}
                 </div>

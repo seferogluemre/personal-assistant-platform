@@ -20,7 +20,6 @@ const app = new Elysia()
     })
   )
 
-  // Modüller (Endpointler)
   .use(authController)
   .use(chatController)
   .use(aiController)
