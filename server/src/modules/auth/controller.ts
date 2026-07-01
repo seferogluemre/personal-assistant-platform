@@ -17,9 +17,12 @@ export const authController = new Elysia({ prefix: "/auth" })
   // ── KAYIT OL ──────────────────────────────────────────────────
   .post(
     "/sign-up",
-    async ({ body, error, jwt, cookie: { auth_token } }) => {
+    async ({ body, set, jwt, cookie: { auth_token } }) => {
       const existing = await findUserByEmail(body.email);
-      if (existing) return error(400, { message: "Bu email zaten kullanılıyor." });
+      if (existing) {
+        set.status = 400;
+        return { message: "Bu email zaten kullanılıyor." };
+      }
 
       const user = await createUser(body);
       const safeUser = formatSafeUser(user);
@@ -47,12 +50,18 @@ export const authController = new Elysia({ prefix: "/auth" })
   // ── GİRİŞ YAP ─────────────────────────────────────────────────
   .post(
     "/sign-in",
-    async ({ body, error, jwt, cookie: { auth_token } }) => {
+    async ({ body, set, jwt, cookie: { auth_token } }) => {
       const user = await findUserByEmail(body.email);
-      if (!user) return error(401, { message: "Hatalı email veya şifre." });
+      if (!user) {
+        set.status = 401;
+        return { message: "Hatalı email veya şifre." };
+      }
 
       const isValid = await verifyPassword(body.password, user.password);
-      if (!isValid) return error(401, { message: "Hatalı email veya şifre." });
+      if (!isValid) {
+        set.status = 401;
+        return { message: "Hatalı email veya şifre." };
+      }
 
       const safeUser = formatSafeUser(user);
       const token = await jwt.sign({ userId: user.id });
@@ -76,8 +85,11 @@ export const authController = new Elysia({ prefix: "/auth" })
 
   // ── ME / SESSION ──────────────────────────────────────────────
   .use(authPlugin)
-  .get("/me", ({ user, error }) => {
-    if (!user) return error(401, { message: "Oturum açılmamış." });
+  .get("/me", ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { message: "Oturum açılmamış." };
+    }
     return user;
   })
 
@@ -86,4 +98,5 @@ export const authController = new Elysia({ prefix: "/auth" })
     auth_token.remove();
     return { success: true };
   });
+
 

@@ -93,7 +93,9 @@ export default function RegisterPage() {
               <Input
                 id="name"
                 placeholder="Enter your full name"
-                className="h-10 border-gray-200 bg-white dark:bg-white text-gray-900 dark:text-gray-900 text-sm placeholder:text-gray-400 focus-visible:ring-black"
+                className={`h-10 bg-white dark:bg-white text-gray-900 dark:text-gray-900 text-sm placeholder:text-gray-400 focus-visible:ring-black ${
+                  errors.name ? 'border-red-500 focus-visible:ring-red-500/50' : 'border-gray-200'
+                }`}
                 {...registerField('name')}
               />
               {errors.name && (
@@ -109,7 +111,9 @@ export default function RegisterPage() {
                 id="email"
                 type="email"
                 placeholder="Enter your email address"
-                className="h-10 border-gray-200 bg-white dark:bg-white text-gray-900 dark:text-gray-900 text-sm placeholder:text-gray-400 focus-visible:ring-black"
+                className={`h-10 bg-white dark:bg-white text-gray-900 dark:text-gray-900 text-sm placeholder:text-gray-400 focus-visible:ring-black ${
+                  errors.email ? 'border-red-500 focus-visible:ring-red-500/50' : 'border-gray-200'
+                }`}
                 {...registerField('email')}
               />
               {errors.email && (
@@ -126,7 +130,9 @@ export default function RegisterPage() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••••••"
-                  className="h-10 border-gray-200 bg-white dark:bg-white text-gray-900 dark:text-gray-900 text-sm focus-visible:ring-black pr-10"
+                  className={`h-10 bg-white dark:bg-white text-gray-900 dark:text-gray-900 text-sm focus-visible:ring-black pr-10 ${
+                    errors.password ? 'border-red-500 focus-visible:ring-red-500/50' : 'border-gray-200'
+                  }`}
                   {...registerField('password')}
                 />
                 <button

@@ -6,6 +6,8 @@ import {
   getChatHistory,
   getChatList,
   getMessagesByChatId,
+  deleteChat,
+  updateChatTitle,
 } from "./service";
 import {
   formatChatResponse,
@@ -15,6 +17,7 @@ import {
 import { authPlugin } from "../auth/plugins/authPlugin";
 import { assistantAgent } from "../../providers/mastra/agents/assistant";
 import { searchSimilarDocuments } from "../ai/rag";
+import { getOrCreateAgent } from "../agent/service";
 
 // ─────────────────────────────────────────────
 // Chat Modülü - Controller
@@ -47,23 +50,37 @@ export const chatController = new Elysia({ prefix: "/chat" })
             ? `\n\n[SİSTEM BİLGİSİ (Kullanıcıya Gösterme) - Vektör Arama Sonuçları (Bu bilgileri kullanarak cevap ver):]\n` + relevantDocs.map(d => `- ${d.content}`).join("\n")
             : "";
 
-          // 5. Mastra'ya mesaj listesini hazırla
-          // history dizisinin en son elemanı zaten az önce kaydettiğimiz mevcut 'message' oluyor.
-          const promptMessages = history.map(m => ({
-            role: m.role as "user" | "assistant" | "system",
-            content: m.content,
-          }));
+          // 5. Kullanıcının özelleştirilmiş sistem promptunu al
+          const agent = await getOrCreateAgent(user!.id, "Yavuz AI");
+          const systemPrompt = agent.systemPrompt;
+
+          // 6. Mastra'ya mesaj listesini hazırla
+          const promptMessages = [
+            { role: "system" as const, content: systemPrompt },
+            ...history.map(m => ({
+              role: m.role as "user" | "assistant" | "system",
+              content: m.content,
+            }))
+          ];
 
           // Vektörden gelen ek bilgiyi (RAG Context) son kullanıcı mesajının ardına gizlice iliştiriyoruz
-          if (contextStr && promptMessages.length > 0) {
+          if (contextStr && promptMessages.length > 1) {
             promptMessages[promptMessages.length - 1].content += contextStr;
           }
 
-          // 6. Mastra'dan LLM (Gemini) cevabını üret (AI SDK v4 uyumluluğu için generateLegacy)
-          const result = await assistantAgent.generateLegacy(promptMessages);
-          const replyText = result.text;
+          let replyText = "";
+          try {
+            // 7. Mastra'dan LLM (Gemini) cevabını üret (AI SDK v4 uyumluluğu için generateLegacy)
+            const result = await assistantAgent.generateLegacy(promptMessages as any);
+            replyText = result.text;
+          } catch (error) {
+            console.error("Gemini API çağrısı başarısız oldu, test modu yanıtı dönülüyor:", error);
+            replyText = `Yavuz AI (Simülasyon Modu): Merhaba! Google Gemini API anahtarı geçersiz veya eksik olduğu için geçici olarak simülasyon modunda yanıt veriyorum.\n\n` +
+              `**Aktif Sistem Promptum:**\n"${systemPrompt}"\n\n` +
+              `**Gönderdiğiniz Mesaj:**\n"${message}"`;
+          }
 
-          // 7. Asistanın yanıtını DB'ye kaydet
+          // 8. Asistanın yanıtını DB'ye kaydet
           const assistantMessageId = await saveAssistantMessage(chatId, replyText);
 
           return formatChatResponse({
@@ -101,6 +118,43 @@ export const chatController = new Elysia({ prefix: "/chat" })
         {
           params: t.Object({
             chatId: t.String(),
+          }),
+        }
+      )
+
+      // ── DELETE /chat/:chatId ──────────────────────────────────────
+      .delete(
+        "/:chatId",
+        async ({ params, error, user }) => {
+          const success = await deleteChat(user!.id, params.chatId);
+          if (!success) {
+            return error(404, { message: "Sohbet bulunamadı veya silinemedi." });
+          }
+          return { success: true };
+        },
+        {
+          params: t.Object({
+            chatId: t.String(),
+          }),
+        }
+      )
+
+      // ── PUT /chat/:chatId/title ──────────────────────────────────
+      .put(
+        "/:chatId/title",
+        async ({ params, body, error, user }) => {
+          const success = await updateChatTitle(user!.id, params.chatId, body.title);
+          if (!success) {
+            return error(404, { message: "Sohbet bulunamadı veya güncellenemedi." });
+          }
+          return { success: true };
+        },
+        {
+          params: t.Object({
+            chatId: t.String(),
+          }),
+          body: t.Object({
+            title: t.String({ minLength: 1, maxLength: 100 }),
           }),
         }
       )

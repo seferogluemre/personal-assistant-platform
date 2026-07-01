@@ -8,6 +8,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { chatService } from "@/services/chat";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -68,8 +70,8 @@ export default function DashboardPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Chat States
-  const [threads, setThreads] = useState<Thread[]>([createThread()]);
-  const [activeThreadId, setActiveThreadId] = useState(threads[0].id);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -78,6 +80,13 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
+
+  // Dialog States
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newThreadTitle, setNewThreadTitle] = useState("");
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [threadToDeleteId, setThreadToDeleteId] = useState<string | null>(null);
 
   // Skills States
   const [skillsEnabled, setSkillsEnabled] = useState({
@@ -96,6 +105,7 @@ export default function DashboardPage() {
     "Sen OpenClaw asistanısın. Kullanıcıya her zaman kibar, profesyonel ve kısa yanıtlar ver. Bilmediğin konularda uydurmak yerine veritabanından veya webden arama yapacağını belirt."
   );
   const [isUpdatingPrompt, setIsUpdatingPrompt] = useState(false);
+  const [showPromptInfo, setShowPromptInfo] = useState(true);
 
   // Refs
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -104,9 +114,64 @@ export default function DashboardPage() {
   const editInputRef = useRef<HTMLInputElement>(null);
   const skillFileInputRef = useRef<HTMLInputElement>(null);
 
-  const activeThread = threads.find((t) => t.id === activeThreadId)!;
+  const activeThread = threads.find((t) => t.id === activeThreadId);
 
   useEffect(() => setMounted(true), []);
+
+  // Sayfa yüklendiğinde sohbetleri ve sistem promptunu çek
+  useEffect(() => {
+    // 1. Sohbet listesini getir
+    chatService.fetchChats()
+      .then((chatList) => {
+        const mappedThreads: Thread[] = chatList.map(c => ({
+          id: c.id,
+          title: c.title || "Yeni Sohbet",
+          messages: [],
+          createdAt: new Date(c.createdAt),
+        }));
+        setThreads(mappedThreads);
+        if (mappedThreads.length > 0) {
+          setActiveThreadId(mappedThreads[0].id);
+        }
+      })
+      .catch((err) => {
+        console.error("Sohbetler yüklenirken hata oluştu:", err);
+      });
+
+    // 2. Sistem promptunu getir
+    chatService.getSystemPrompt("Yavuz AI")
+      .then((res) => {
+        if (res.success) {
+          setSystemPrompt(res.agent.systemPrompt);
+        }
+      })
+      .catch((err) => {
+        console.error("Sistem promptu yüklenirken hata:", err);
+      });
+  }, []);
+
+  // Aktif sohbet değiştikçe mesajlarını çek
+  useEffect(() => {
+    if (!activeThreadId) return;
+
+    // Eğer o sohbet client-side geçici UUID ise çekmeye çalışma
+    if (activeThreadId.length > 30) return;
+
+    chatService.fetchMessages(activeThreadId)
+      .then((chatMsgs) => {
+        const mappedMsgs: Message[] = chatMsgs.map(m => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          timestamp: new Date(m.createdAt),
+        }));
+
+        setThreads(prev => prev.map(t => t.id === activeThreadId ? { ...t, messages: mappedMsgs } : t));
+      })
+      .catch((err) => {
+        console.error("Mesajlar çekilirken hata:", err);
+      });
+  }, [activeThreadId]);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -121,10 +186,46 @@ export default function DashboardPage() {
   }, [editingThreadId]);
 
   const handleNewThread = () => {
+    setIsCreateDialogOpen(true);
+  };
+
+  const handleCreateThreadSubmit = () => {
+    const trimmed = newThreadTitle.trim();
+    if (!trimmed) return;
     const t = createThread();
+    t.title = trimmed;
     setThreads((prev) => [t, ...prev]);
     setActiveThreadId(t.id);
     setActiveTab("chat");
+    setNewThreadTitle("");
+    setIsCreateDialogOpen(false);
+  };
+
+  const handleDeleteThreadSubmit = async () => {
+    if (!threadToDeleteId) return;
+    try {
+      if (threadToDeleteId.length < 30) {
+        await chatService.deleteChat(threadToDeleteId);
+      }
+      setThreads((prev) => {
+        const filtered = prev.filter((t) => t.id !== threadToDeleteId);
+        if (activeThreadId === threadToDeleteId) {
+          if (filtered.length > 0) {
+            setActiveThreadId(filtered[0].id);
+          } else {
+            setActiveThreadId(null);
+          }
+        }
+        return filtered;
+      });
+      toast.success("Sohbet başarıyla silindi.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Sohbet silinirken hata oluştu.";
+      toast.error(msg);
+    } finally {
+      setThreadToDeleteId(null);
+      setIsDeleteDialogOpen(false);
+    }
   };
 
   // ─── Thread Title Edit ───────────────────────────────────────────────────
@@ -134,11 +235,18 @@ export default function DashboardPage() {
     setEditingTitle(currentTitle);
   };
 
-  const saveTitle = () => {
+  const saveTitle = async () => {
     if (!editingThreadId) return;
     const trimmed = editingTitle.trim();
     if (trimmed) {
       setThreads((prev) => prev.map((t) => (t.id === editingThreadId ? { ...t, title: trimmed } : t)));
+      try {
+        if (editingThreadId.length < 30) {
+          await chatService.updateChatTitle(editingThreadId, trimmed);
+        }
+      } catch (err) {
+        console.error("Başlık güncellenemedi:", err);
+      }
     }
     setEditingThreadId(null);
     setEditingTitle("");
@@ -161,8 +269,10 @@ export default function DashboardPage() {
         if (isImage) {
           const reader = new FileReader();
           reader.onload = (e) => {
-            att.url = e.target?.result as string;
-            setAttachments((prev) => [...prev, att]);
+            if (e.target?.result) {
+              att.url = e.target.result as string;
+              setAttachments((prev) => [...prev, att]);
+            }
           };
           reader.readAsDataURL(file);
         } else {
@@ -203,46 +313,61 @@ export default function DashboardPage() {
 
   const handleSend = async () => {
     const content = input.trim();
-    if ((!content && attachments.length === 0) || isLoading) return;
+    if ((!content && attachments.length === 0) || isLoading || !activeThreadId) return;
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
+    const tempUserId = crypto.randomUUID();
     const userMsg: Message = {
-      id: crypto.randomUUID(),
+      id: tempUserId,
       role: "user",
       content,
       timestamp: new Date(),
       attachments: attachments.length > 0 ? [...attachments] : undefined,
     };
 
-    const isFirst = activeThread.messages.length === 0;
-    const newTitle = isFirst
-      ? (content || attachments[0]?.name || "New Chat").slice(0, 40)
-      : activeThread.title;
-
     setThreads((prev) =>
-      prev.map((t) => (t.id === activeThreadId ? { ...t, title: newTitle, messages: [...t.messages, userMsg] } : t))
+      prev.map((t) => (t.id === activeThreadId ? { ...t, messages: [...t.messages, userMsg] } : t))
     );
     setAttachments([]);
     setIsLoading(true);
 
-    await new Promise((r) => setTimeout(r, 1400));
+    try {
+      const sendChatId = activeThreadId.length > 30 ? undefined : activeThreadId;
+      const res = await chatService.sendMessage(sendChatId, content);
 
-    const aiMsg: Message = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: `Yavuz AI olarak sorunuzu aldım: "${content}"${
-        attachments.length > 0 ? ` (${attachments.length} dosya ekiyle birlikte)` : ""
-      }. \n\nŞu anda sistem promptum: "${systemPrompt.slice(0, 50)}..." kurallarına göre cevap veriyorum. Web Arama yeteneği: ${
-        skillsEnabled.webSearch ? "AÇIK" : "KAPALI"
-      }.`,
-      timestamp: new Date(),
-    };
+      const aiMsg: Message = {
+        id: res.messageId,
+        role: "assistant",
+        content: res.content,
+        timestamp: new Date(res.createdAt),
+      };
 
-    setThreads((prev) =>
-      prev.map((t) => (t.id === activeThreadId ? { ...t, messages: [...t.messages, aiMsg] } : t))
-    );
-    setIsLoading(false);
+      setThreads((prev) =>
+        prev.map((t) => {
+          if (t.id === activeThreadId) {
+            const hasCustomTitle = t.title !== "New Chat" && t.title !== "Yeni Sohbet";
+            return {
+              ...t,
+              id: res.chatId,
+              title: hasCustomTitle ? t.title : (content.slice(0, 40) || "Yeni Sohbet"),
+              messages: t.messages.map(m => m.id === tempUserId ? { ...m, id: crypto.randomUUID() } : m).concat(aiMsg),
+            };
+          }
+          return t;
+        })
+      );
+      setActiveThreadId(res.chatId);
+
+      if (activeThread && activeThread.title && activeThread.title !== "New Chat" && activeThread.title !== "Yeni Sohbet" && sendChatId === undefined) {
+        await chatService.updateChatTitle(res.chatId, activeThread.title);
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Mesaj gönderilemedi.";
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -256,20 +381,25 @@ export default function DashboardPage() {
 
   const handleUpdatePrompt = async () => {
     setIsUpdatingPrompt(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setIsUpdatingPrompt(false);
-    toast.success("Yavuz AI sistem promptu başarıyla güncellendi!");
+    try {
+      await chatService.updateSystemPrompt("Yavuz AI", systemPrompt);
+      toast.success("Yavuz AI sistem promptu başarıyla güncellendi!");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Sistem promptu güncellenirken hata oldu.";
+      toast.error(msg);
+    } finally {
+      setIsUpdatingPrompt(false);
+    }
   };
 
-  const isEmpty = activeThread.messages.length === 0;
+  const isEmpty = !activeThread || activeThread.messages.length === 0;
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       {/* ─── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
-        className={`flex-shrink-0 bg-muted/30 border-r flex flex-col transition-all duration-300 ${
-          sidebarCollapsed ? "w-[64px]" : "w-[240px]"
-        }`}
+        className={`flex-shrink-0 bg-muted/30 border-r flex flex-col transition-all duration-300 ${sidebarCollapsed ? "w-[64px]" : "w-[240px]"
+          }`}
       >
         {/* Header / Logo */}
         <div className="p-4 border-b flex items-center justify-between overflow-hidden">
@@ -321,9 +451,8 @@ export default function DashboardPage() {
         <div className="p-3 space-y-1">
           <button
             onClick={() => setActiveTab("chat")}
-            className={`w-full flex items-center gap-3 text-sm rounded-lg h-10 transition-all ${
-              sidebarCollapsed ? "justify-center" : "px-3"
-            } ${activeTab === "chat" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+            className={`w-full flex items-center gap-3 text-sm rounded-lg h-10 transition-all ${sidebarCollapsed ? "justify-center" : "px-3"
+              } ${activeTab === "chat" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -333,9 +462,8 @@ export default function DashboardPage() {
 
           <button
             onClick={() => setActiveTab("skills")}
-            className={`w-full flex items-center gap-3 text-sm rounded-lg h-10 transition-all ${
-              sidebarCollapsed ? "justify-center" : "px-3"
-            } ${activeTab === "skills" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+            className={`w-full flex items-center gap-3 text-sm rounded-lg h-10 transition-all ${sidebarCollapsed ? "justify-center" : "px-3"
+              } ${activeTab === "skills" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
@@ -345,9 +473,8 @@ export default function DashboardPage() {
 
           <button
             onClick={() => setActiveTab("prompt")}
-            className={`w-full flex items-center gap-3 text-sm rounded-lg h-10 transition-all ${
-              sidebarCollapsed ? "justify-center" : "px-3"
-            } ${activeTab === "prompt" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+            className={`w-full flex items-center gap-3 text-sm rounded-lg h-10 transition-all ${sidebarCollapsed ? "justify-center" : "px-3"
+              } ${activeTab === "prompt" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
@@ -357,9 +484,8 @@ export default function DashboardPage() {
 
           <button
             onClick={() => setActiveTab("account")}
-            className={`w-full flex items-center gap-3 text-sm rounded-lg h-10 transition-all ${
-              sidebarCollapsed ? "justify-center" : "px-3"
-            } ${activeTab === "account" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+            className={`w-full flex items-center gap-3 text-sm rounded-lg h-10 transition-all ${sidebarCollapsed ? "justify-center" : "px-3"
+              } ${activeTab === "account" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
@@ -387,9 +513,8 @@ export default function DashboardPage() {
                 <div
                   key={t.id}
                   onClick={() => { setActiveThreadId(t.id); setEditingThreadId(null); }}
-                  className={`group w-full text-left text-xs rounded-lg px-2.5 py-2 transition-colors leading-snug cursor-pointer flex items-center gap-1 ${
-                    activeThreadId === t.id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  }`}
+                  className={`group w-full text-left text-xs rounded-lg px-2.5 py-2 transition-colors leading-snug cursor-pointer flex items-center gap-1 ${activeThreadId === t.id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
                 >
                   {editingThreadId === t.id ? (
                     <input
@@ -406,15 +531,26 @@ export default function DashboardPage() {
                       <div className="flex-1 min-w-0">
                         <div className="truncate">{t.title}</div>
                       </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); startEditingTitle(t.id, t.title); }}
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity flex-shrink-0"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                        </svg>
-                      </button>
+                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 flex-shrink-0 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); startEditingTitle(t.id, t.title); }}
+                          className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setThreadToDeleteId(t.id); setIsDeleteDialogOpen(true); }}
+                          className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>
@@ -454,7 +590,7 @@ export default function DashboardPage() {
                 </svg>
                 Profil
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-sm cursor-pointer" onClick={logout}>
+              <DropdownMenuItem className="text-sm cursor-pointer" onClick={() => setIsLogoutDialogOpen(true)}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-red-500">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
                 </svg>
@@ -474,7 +610,7 @@ export default function DashboardPage() {
               <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
               <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
             </svg>
-            <span className="capitalize">{activeTab === "chat" ? activeThread.title : activeTab === "skills" ? "AI Skills" : activeTab === "prompt" ? "Prompt Yönetimi" : "Hesabım"}</span>
+            <span className="capitalize">{activeTab === "chat" ? (activeThread?.title || "Sohbet") : activeTab === "skills" ? "AI Skills" : activeTab === "prompt" ? "Prompt Yönetimi" : "Hesabım"}</span>
           </div>
 
           {/* Right side: dark mode toggle */}
@@ -511,7 +647,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="flex-1 overflow-y-auto">
-                    <ChatMessages messages={activeThread.messages} isLoading={isLoading} />
+                    <ChatMessages messages={activeThread?.messages || []} isLoading={isLoading} />
                     <div ref={bottomRef} />
                   </div>
                 )}
@@ -622,7 +758,9 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <div className="flex items-center justify-between mt-6">
-                    <span className="text-xs font-semibold text-green-500">Aktif</span>
+                    <span className={`text-xs font-semibold ${skillsEnabled.rag ? "text-green-500" : "text-muted-foreground"}`}>
+                      {skillsEnabled.rag ? "Aktif" : "Pasif"}
+                    </span>
                     <button
                       onClick={() => setSkillsEnabled(prev => ({ ...prev, rag: !prev.rag }))}
                       className={`w-9 h-5 rounded-full p-0.5 transition-colors ${skillsEnabled.rag ? "bg-primary" : "bg-muted-foreground/30"}`}
@@ -640,7 +778,9 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <div className="flex items-center justify-between mt-6">
-                    <span className="text-xs font-semibold text-gray-500">Pasif</span>
+                    <span className={`text-xs font-semibold ${skillsEnabled.webSearch ? "text-green-500" : "text-muted-foreground"}`}>
+                      {skillsEnabled.webSearch ? "Aktif" : "Pasif"}
+                    </span>
                     <button
                       onClick={() => setSkillsEnabled(prev => ({ ...prev, webSearch: !prev.webSearch }))}
                       className={`w-9 h-5 rounded-full p-0.5 transition-colors ${skillsEnabled.webSearch ? "bg-primary" : "bg-muted-foreground/30"}`}
@@ -658,7 +798,9 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <div className="flex items-center justify-between mt-6">
-                    <span className="text-xs font-semibold text-green-500">Aktif</span>
+                    <span className={`text-xs font-semibold ${skillsEnabled.fileAnalysis ? "text-green-500" : "text-muted-foreground"}`}>
+                      {skillsEnabled.fileAnalysis ? "Aktif" : "Pasif"}
+                    </span>
                     <button
                       onClick={() => setSkillsEnabled(prev => ({ ...prev, fileAnalysis: !prev.fileAnalysis }))}
                       className={`w-9 h-5 rounded-full p-0.5 transition-colors ${skillsEnabled.fileAnalysis ? "bg-primary" : "bg-muted-foreground/30"}`}
@@ -690,12 +832,11 @@ export default function DashboardPage() {
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFileSelect(e.dataTransfer.files, "skills"); }}
                   onClick={() => skillFileInputRef.current?.click()}
-                  className={`border border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                    isDragging ? "border-primary/50 bg-primary/5" : "border-border hover:border-foreground/20 hover:bg-muted/20"
-                  }`}
+                  className={`border border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${isDragging ? "border-primary/50 bg-primary/5" : "border-border hover:border-foreground/20 hover:bg-muted/20"
+                    }`}
                 >
                   <svg className="mx-auto mb-3 text-muted-foreground" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
                   <p className="text-sm font-medium">Dosyayı buraya sürükleyin veya <span className="underline text-primary">seçin</span></p>
                   <p className="text-[11px] text-muted-foreground mt-1">TXT, PDF, MD, CSV, JSON — maks 10MB</p>
@@ -710,7 +851,7 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-blue-500/10 rounded flex items-center justify-center">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
                             </svg>
                           </div>
                           <div>
@@ -724,7 +865,7 @@ export default function DashboardPage() {
                           className="w-8 h-8 rounded hover:bg-muted text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+                            <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
                           </svg>
                         </button>
                       </div>
@@ -755,15 +896,23 @@ export default function DashboardPage() {
                   />
                 </div>
 
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs rounded-xl flex gap-3">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                  </svg>
-                  <div>
-                    <p className="font-bold">Önemli Hatırlatma</p>
-                    <p className="mt-0.5 leading-relaxed">Sistem promptunu değiştirdiğinizde Yavuz AI yeni gelen bütün sohbetlerde bu kuralları derhal uygulamaya başlar. Aktif açık sohbetleri etkilemeyebilir.</p>
+                {showPromptInfo && (
+                  <div className="p-4 bg-green-500/5 dark:bg-green-500/10 border border-green-500/20 text-foreground text-xs rounded-2xl flex items-start justify-between gap-4 shadow-xs">
+                    <div className="flex-1 space-y-1">
+                      <p className="font-bold text-green-500 dark:text-green-400">Önemli Hatırlatma</p>
+                      <p className="text-muted-foreground leading-relaxed">Sistem promptunu değiştirdiğinizde Yavuz AI yeni gelen bütün sohbetlerde bu kuralları derhal uygulamaya başlar. Aktif açık sohbetleri etkilemeyebilir.</p>
+                    </div>
+                    <button
+                      onClick={() => setShowPromptInfo(false)}
+                      className="bg-green-500/10 hover:bg-green-500/20 active:bg-green-500/30 text-green-500 rounded-xl px-3 py-2 flex items-center gap-1.5 transition-all flex-shrink-0 font-semibold"
+                    >
+                      <span>Bilgilendim</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
                   </div>
-                </div>
+                )}
 
                 <Button
                   onClick={handleUpdatePrompt}
@@ -815,7 +964,7 @@ export default function DashboardPage() {
 
               {/* Actions */}
               <div className="flex justify-end gap-3">
-                <Button onClick={logout} variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10 h-10 px-5">
+                <Button onClick={() => setIsLogoutDialogOpen(true)} variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10 h-10 px-5">
                   Çıkış Yap
                 </Button>
               </div>
@@ -823,6 +972,78 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
+
+      {/* ─── Dialogs & Modals ────────────────────────────────────────────── */}
+
+      {/* 1. New Chat Name Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={(open) => { setIsCreateDialogOpen(open); if (!open) setNewThreadTitle(""); }}>
+        <DialogContent className="max-w-md bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Yeni Sohbet Başlığı</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <input
+              type="text"
+              placeholder="Sohbet ismini girin..."
+              value={newThreadTitle}
+              onChange={(e) => setNewThreadTitle(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateThreadSubmit()}
+              className="w-full bg-muted/20 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-primary text-foreground"
+            />
+          </div>
+          <DialogFooter className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setIsCreateDialogOpen(false); setNewThreadTitle(""); }} className="h-9 text-xs">
+              İptal
+            </Button>
+            <Button onClick={handleCreateThreadSubmit} disabled={!newThreadTitle.trim()} className="h-9 text-xs bg-primary text-primary-foreground">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Oluştur
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2. Logout Confirm Dialog */}
+      <Dialog open={isLogoutDialogOpen} onOpenChange={setIsLogoutDialogOpen}>
+        <DialogContent className="max-w-md bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Çıkış Yap</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-xs text-muted-foreground leading-relaxed">
+            Çıkış yapmak istediğinize emin misiniz? Oturumunuz sonlandırılacaktır.
+          </div>
+          <DialogFooter className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsLogoutDialogOpen(false)} className="h-9 text-xs">
+              Hayır, İptal Et
+            </Button>
+            <Button variant="destructive" onClick={() => { setIsLogoutDialogOpen(false); logout(); }} className="h-9 text-xs">
+              Evet, Çıkış Yap
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 3. Delete Chat Confirm Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => { setIsDeleteDialogOpen(open); if (!open) setThreadToDeleteId(null); }}>
+        <DialogContent className="max-w-md bg-background border-border">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Sohbeti Sil</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-xs text-muted-foreground leading-relaxed">
+            Bu sohbeti silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
+          </div>
+          <DialogFooter className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setIsDeleteDialogOpen(false); setThreadToDeleteId(null); }} className="h-9 text-xs">
+              İptal
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteThreadSubmit} className="h-9 text-xs">
+              Evet, Sil
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

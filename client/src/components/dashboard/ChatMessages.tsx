@@ -33,8 +33,13 @@ const USER_AVATAR = (
 
 const AI_AVATAR = (
   <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 8V4H8" />
+      <rect width="16" height="12" x="4" y="8" rx="2" />
+      <path d="M2 14h2" />
+      <path d="M20 14h2" />
+      <path d="M15 13v2" />
+      <path d="M9 13v2" />
     </svg>
   </div>
 );
@@ -124,10 +129,11 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
               {/* Bubble */}
               {msg.content && (
                 <div
-                  className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${isUser
-                      ? "bg-primary text-primary-foreground rounded-tr-sm"
-                      : "bg-muted text-foreground rounded-tl-sm"
-                    }`}
+                  className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-sm transition-all duration-200 ${
+                    isUser
+                      ? "bg-primary/95 hover:bg-primary text-primary-foreground rounded-tr-sm"
+                      : "bg-muted/75 dark:bg-muted/30 border border-border/40 dark:border-border/10 text-foreground rounded-tl-sm backdrop-blur-[1px]"
+                  }`}
                 >
                   {msg.content}
                 </div>

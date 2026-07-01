@@ -21,13 +21,14 @@ model Role {
 model User {
   id        String   @id @default(cuid())
   email     String   @unique // Auth requires email
-  password  String   // Hashed password
+  password  String // Hashed password
   name      String?
   roleId    String
   role      Role     @relation(fields: [roleId], references: [id])
   chats     Chat[]
+  agents    Agent[]
   createdAt DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 }
 
 model Chat {
@@ -50,9 +51,21 @@ model Message {
 }
 
 model Document {
-  id        String                      @id @default(cuid())
+  id        String                       @id @default(cuid())
   content   String // RAG için metin (chunk) içeriği
   embedding Unsupported("vector(3072)")? // Vektör verisi (gemini-embedding-2)
   metadata  Json? // Ekstra bilgiler (hangi dosyadan geldi vb.)
-  createdAt DateTime                    @default(now())
+  createdAt DateTime                     @default(now())
+}
+
+model Agent {
+  id           String   @id @default(cuid())
+  name         String
+  systemPrompt String   @default("Sen OpenClaw asistanısın. Kullanıcıya her zaman kibar, profesyonel ve kısa yanıtlar ver. Bilmediğin konularda uydurmak yerine veritabanından veya webden arama yapacağını belirt.")
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, name])
 }

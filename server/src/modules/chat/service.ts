@@ -126,3 +126,44 @@ export async function getMessagesByChatId(
     createdAt: m.createdAt,
   }));
 }
+
+/**
+ * Sohbeti ve ona bağlı tüm mesajları veritabanından siler.
+ */
+export async function deleteChat(userId: string, chatId: string): Promise<boolean> {
+  const existing = await prisma.chat.findUnique({
+    where: { id: chatId },
+    select: { userId: true },
+  });
+
+  if (!existing || existing.userId !== userId) {
+    return false;
+  }
+
+  await prisma.chat.delete({
+    where: { id: chatId },
+  });
+
+  return true;
+}
+
+/**
+ * Sohbetin başlığını günceller.
+ */
+export async function updateChatTitle(userId: string, chatId: string, title: string): Promise<boolean> {
+  const existing = await prisma.chat.findUnique({
+    where: { id: chatId },
+    select: { userId: true },
+  });
+
+  if (!existing || existing.userId !== userId) {
+    return false;
+  }
+
+  await prisma.chat.update({
+    where: { id: chatId },
+    data: { title },
+  });
+
+  return true;
+}

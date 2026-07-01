@@ -63,6 +63,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace("/login");
   }, [router]);
 
+  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+
+  if (isLoading && !isPublic) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!isLoading && !user && !isPublic) {
+    return null;
+  }
+
   return (
     <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
       {children}
