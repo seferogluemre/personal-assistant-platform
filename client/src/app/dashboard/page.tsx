@@ -120,10 +120,9 @@ export default function DashboardPage() {
 
   // Sayfa yüklendiğinde sohbetleri ve sistem promptunu çek
   useEffect(() => {
-    // 1. Sohbet listesini getir
     chatService.fetchChats()
       .then((chatList) => {
-        const mappedThreads: Thread[] = chatList.map(c => ({
+        const mappedThreads: Thread[] = (chatList || []).map(c => ({
           id: c.id,
           title: c.title || "Yeni Sohbet",
           messages: [],

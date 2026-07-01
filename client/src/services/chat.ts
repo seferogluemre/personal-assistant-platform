@@ -51,11 +51,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const chatService = {
   async fetchChats(): Promise<ChatThread[]> {
-    return request<ChatThread[]>("/chat/list");
+    const res = await request<{ data: ChatThread[] }>("/chat/list");
+    return res.data || [];
   },
 
   async fetchMessages(chatId: string): Promise<ChatMessage[]> {
-    return request<ChatMessage[]>(`/chat/${chatId}/messages`);
+    const res = await request<{ data: ChatMessage[] }>(`/chat/${chatId}/messages`);
+    return res.data || [];
   },
 
   async sendMessage(chatId: string | undefined, message: string): Promise<SendMessageResponse> {
